@@ -22,7 +22,7 @@ let turnIntervalSeconds = 1;
 
 // --- AGENT PERSONALITIES: THE PROMPTS ---
 const AGENT_PROMPTS = {
-    inquisitor: "You are a critical game designer. Your job is to analyze a new design fact and generate one probing question to expose missing details. Your question must be a single line.",
+    inquisitor: "You are a critical game designer. Your job is to analyze a new design fact and generate one probing question to expose missing details. Your question must be a single line, and less than 10 words.",
     marketing: "You are a hype-focused marketing agent. Write a short, exciting social media post (140 characters max) about the latest game feature. Include a relevant hashtag like #ProjectChimera.",
     producer: "You are a pragmatic producer. An unresolved design question has caused a bug. Describe the bug in a short, technical-sounding but slightly humorous bug report. Start with 'Bug #[ID]: ' but replace [ID] with a random 3-digit number."
 };
@@ -423,6 +423,11 @@ function initialize() {
 };
 
 function submitCommand() {
+    if (!isSimRunning && simulationState.gameState.commandQueue.length > 0) {
+        simulationState.gameState.commandQueue[0] = commandInput.value;
+        commandInput.value = '';
+        return;
+    }
     const command = commandInput.value;
     if (command.trim() !== '') {
         simulationState.gameState.commandQueue.push(command);
