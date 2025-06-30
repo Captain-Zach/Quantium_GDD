@@ -71,10 +71,20 @@ function generateId(prefix = 'q') {
  * @returns {Promise<string>} The AI-generated text response.
  */
 async function queryAgent(systemPrompt, userPrompt) {
-    // UPDATED: Point to the local LM Studio server endpoint.
-    const endpoint = "http://localhost:1234/v1/chat/completions";
+    // --- REPLACEMENT START ---
+    // Input validation: Ensure prompts are valid strings before sending.
+    if (!systemPrompt || typeof systemPrompt !== 'string' || systemPrompt.trim() === '') {
+        const errorMessage = "queryAgent Error: systemPrompt is invalid. Aborting API call.";
+        console.error(errorMessage, { systemPrompt });
+        return `Fallback: ${errorMessage}`;
+    }
+    if (!userPrompt || typeof userPrompt !== 'string' || userPrompt.trim() === '') {
+        const errorMessage = "queryAgent Error: userPrompt is invalid. Aborting API call.";
+        console.error(errorMessage, { userPrompt });
+        return `Fallback: ${errorMessage}`;
+    }
 
-    // UPDATED: Use the OpenAI-compatible message format.
+    const endpoint = "http://localhost:1234/v1/chat/completions";
     const payload = {
         model: "local-model", // This field is often ignored by LM Studio but good practice.
         messages: [
@@ -82,9 +92,11 @@ async function queryAgent(systemPrompt, userPrompt) {
             { role: "user", content: userPrompt }
         ],
         temperature: 0.7,
-        // LM Studio's server doesn't support streaming from a simple fetch like this.
         stream: false,
     };
+
+    // For debugging: Log the payload to see exactly what's being sent.
+    console.log("Sending payload to LM Studio:", JSON.stringify(payload, null, 2));
 
     try {
         const response = await fetch(endpoint, {
@@ -94,13 +106,18 @@ async function queryAgent(systemPrompt, userPrompt) {
         });
 
         if (!response.ok) {
-            console.error("API call to local model failed:", response.status, response.statusText);
-            return `Fallback: Could not reach the local agent (status: ${response.status}). Is LM Studio running and the server started?`;
+            // Log the full response for more detailed error info
+            const errorBody = await response.text();
+            console.error("API call to local model failed:", {
+                status: response.status,
+                statusText: response.statusText,
+                body: errorBody
+            });
+            return `Fallback: Could not reach the local agent (status: ${response.status}). Check browser and LM Studio console for errors.`;
         }
 
         const data = await response.json();
         
-        // UPDATED: Parse the response according to OpenAI format.
         if (data.choices && data.choices[0]?.message?.content) {
             return data.choices[0].message.content.trim();
         } else {
@@ -108,9 +125,10 @@ async function queryAgent(systemPrompt, userPrompt) {
             return "Fallback: Agent returned an invalid response format.";
         }
     } catch (error) {
-        console.error("Failed to connect to LM Studio.", error);
+        console.error("Failed to connect to LM Studio. Is the server running at the correct address and are there any CORS issues?", error);
         return "Fallback: The agent is offline. Make sure the LM Studio server is running on http://localhost:1234.";
     }
+    // --- REPLACEMENT END ---
 }
 
 
@@ -155,9 +173,9 @@ async function inquisitorTurn() {
     const newQuestions = [];
     for (const q of recentQuanta) {
         if (q.declarationSource.toLowerCase().startsWith('/answer')) continue;
-        const designFact = `[${q.quantumType}] ${q.data.name || q.data.description}`;
+        const designFact = `[${q.quantumType}] ${q.data.name || q.data.description || ''}`;
         const questionText = await queryAgent(AGENT_PROMPTS.inquisitor, designFact);
-        if (!questionText.startsWith("Fallback:") && questionText.length > 10) {
+        if (!questionText.startsWith("Fallback:") && questionText.length > 1) { // Changed from 10 to 1 to be less strict
             newQuestions.push({ id: generateId('uq'), text: questionText, status: "Open", sourceQuantumId: q.quantumId });
         }
     }
@@ -201,7 +219,7 @@ async function marketingTurn() {
     }
     const recentQuanta = simulationState.quantumCore.filter(q => q.createdAt === `Week ${simulationState.gameState.currentWeek}`);
     const featureToHype = recentQuanta.find(q => ['Ability', 'Character', 'MechanicPillar', 'Setting'].includes(q.quantumType));
-    if (featureToHype) {
+    if (featureToHype && featureToHype.data.name) { // Added check for name
         const featureDescription = `The new game feature is a ${featureToHype.quantumType} called '${featureToHype.data.name}'.`;
         const hypeText = await queryAgent(AGENT_PROMPTS.marketing, featureDescription);
         simulationState.gameState.lastAgentActivity.marketing = hypeText.startsWith("Fallback:") ? "Creative block! We'll post something next week." : hypeText;
